@@ -1,6 +1,16 @@
 import * as THREE from "three";
 
 export let keys = {};
+let movementLocked = false;
+
+export function setMovementLocked(locked) {
+  movementLocked = !!locked;
+}
+
+/**
+ * Keyboard input map.
+ * Note: keys are *lowercase* (w/a/s/d/q) to match your code style.
+ */
 export function setupPlayerControls() {
   keys = {
     ArrowUp: false,
@@ -11,21 +21,45 @@ export function setupPlayerControls() {
     a: false,
     s: false,
     d: false,
+    q: false, // top-view toggle
   };
 
   window.addEventListener("keydown", (e) => {
-    if (keys.hasOwnProperty(e.key)) keys[e.key] = true;
+    const k = e.key;
+    if (keys.hasOwnProperty(k)) keys[k] = true;
+    // Also support uppercase (Shift)
+    const lower = typeof k === "string" ? k.toLowerCase() : k;
+    if (keys.hasOwnProperty(lower)) keys[lower] = true;
   });
 
   window.addEventListener("keyup", (e) => {
-    if (keys.hasOwnProperty(e.key)) keys[e.key] = false;
+    const k = e.key;
+    if (keys.hasOwnProperty(k)) keys[k] = false;
+    const lower = typeof k === "string" ? k.toLowerCase() : k;
+    if (keys.hasOwnProperty(lower)) keys[lower] = false;
   });
 
   return keys;
 }
 
-export function movePlayerAnimated(playerData, dt, walls, speed = 5, freeLook = null, isFPS = true, camera = null, cameraYaw = null) {
+export function movePlayerAnimated(
+  playerData,
+  dt,
+  walls,
+  speed = 5,
+  freeLook = null,
+  isFPS = true,
+  camera = null,
+  cameraYaw = null
+) {
   const { model, mixer } = playerData;
+
+  // In overview / UI mode: no movement, but keep animations ticking
+  if (movementLocked || speed <= 0) {
+    mixer.update(dt);
+    return null;
+  }
+
   let moveDir = new THREE.Vector3();
 
   // Build movement vector from keys
@@ -35,7 +69,6 @@ export function movePlayerAnimated(playerData, dt, walls, speed = 5, freeLook = 
   if (keys.d) moveDir.x += 1;
 
   if (moveDir.length() === 0) {
-    // Still update mixer even when not moving
     mixer.update(dt);
     return null;
   }
@@ -50,10 +83,7 @@ export function movePlayerAnimated(playerData, dt, walls, speed = 5, freeLook = 
     moveDir.applyQuaternion(quat);
   } else if (!isFPS && cameraYaw !== null) {
     // Third-person: rotate movement relative to camera
-    // Camera yaw represents where camera is looking (toward player)
-    // For movement, we want to move relative to camera's orientation
-    // So we rotate by camera yaw + PI (180 degrees) to get camera's "back" direction
-    const movementYaw = cameraYaw + Math.PI; // Camera looks at player, so move relative to camera's back
+    const movementYaw = cameraYaw + Math.PI; // camera looks at player
     const quat = new THREE.Quaternion();
     quat.setFromEuler(new THREE.Euler(0, movementYaw, 0, "YXZ"));
     moveDir.applyQuaternion(quat);
@@ -87,14 +117,11 @@ export function movePlayerAnimated(playerData, dt, walls, speed = 5, freeLook = 
   // Rotate player mesh to face movement in third-person only (smoothly)
   if (!isFPS && moveDir.length() > 0) {
     const angle = Math.atan2(moveDir.x, moveDir.z);
-    // Return target rotation for smooth interpolation in main.js
     return angle;
   }
 
   return null;
 }
-
-
 
 export function checkWin(player, goal) {
   const playerBox = new THREE.Box3().setFromCenterAndSize(
@@ -103,9 +130,5 @@ export function checkWin(player, goal) {
   );
 
   const goalBox = new THREE.Box3().setFromObject(goal);
-
-  if (playerBox.intersectsBox(goalBox)) {
-    return true;
-  }
-  return false;
+  return playerBox.intersectsBox(goalBox);
 }

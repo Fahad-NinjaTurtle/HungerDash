@@ -24,7 +24,7 @@ function loadGrassTexture() {
   return wallMaterial;
 }
 
-export function createWall(size = 1, height = 2) {
+export function createWall(size = 1, height = 0.5) {
   const geometry = new THREE.BoxGeometry(size, height, size);
   const material = loadGrassTexture();
   

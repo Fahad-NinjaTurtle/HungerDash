@@ -16,9 +16,9 @@ export class FreeLook {
   }
 
   initPointerLock() {
-    this.domElement.addEventListener("click", () => {
-      this.domElement.requestPointerLock();
-    });
+    // this.domElement.addEventListener("click", () => {
+    //   this.domElement.requestPointerLock();
+    // });
 
     document.addEventListener("pointerlockchange", () => {
       this.isPointerLocked = document.pointerLockElement === this.domElement;

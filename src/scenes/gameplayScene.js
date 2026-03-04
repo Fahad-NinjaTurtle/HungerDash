@@ -1,6 +1,5 @@
 import * as THREE from "three";
 import { createScene } from "../core/createScene.js";
-import { createCamera } from "../core/createCamera.js";
 import { addLights } from "../world/addLights.js";
 import { createGround } from "../world/createGround.js";
 import { buildMaze } from "../world/buildMaze.js";
@@ -9,6 +8,7 @@ import { loadPlayerModel } from "../player/createPlayer.js";
 import { FreeLook } from "../player/fpsControls.js";
 import { ThirdPersonCamera } from "../player/thirdPersonCamera.js";
 import { generateMaze } from "../world/mazeGenerator.js";
+import { createSkyDome } from "../world/createSkyDome.js";
 
 /**
  * Gameplay Scene
@@ -23,6 +23,7 @@ export class GameplayScene {
     this.playerData = null;
     this.walls = [];
     this.goal = null;
+    this.sky = null;
     this.freeLook = null;
     this.thirdPersonCamera = null;
     this.currentLevel = 1;
@@ -31,12 +32,21 @@ export class GameplayScene {
     this.targetPlayerRotation = 0;
     this.gameCompletePanel = null;
     this.levelDisplay = null;
+
+    // Maze info (used by overview camera)
+    this.mazeCenter = new THREE.Vector3(0, 0, 0);
+    this.mazeSize = 21;
+    this.cellSize = 2;
+
+    // Overview marker (shows player position during top-view)
+    this.overviewMarker = null;
   }
 
   init(level = 1) {
     this.currentLevel = level;
     this.createScene();
     this.createUI();
+    
   }
 
   createScene() {
@@ -48,24 +58,39 @@ export class GameplayScene {
     this.scene = createScene();
     addLights(this.scene);
 
-    const hemi = new THREE.HemisphereLight(0xffffff, 0x444444, 0.5);
+    // audio listener + sounds (footstep / hunger reminder)
+    this._setupAudio();
+
+
+    const hemi = new THREE.HemisphereLight(0xffffff, 0x444444, 0.55);
     this.scene.add(hemi);
 
-    const dir = new THREE.DirectionalLight(0xffffff, 0.8);
-    dir.position.set(5, 10, 5);
+    const dir = new THREE.DirectionalLight(0xffffff, 0.85);
+    dir.position.set(5, 12, 5);
     dir.castShadow = true;
     this.scene.add(dir);
-
-    // Create ground
-    const ground = createGround();
-    this.scene.add(ground);
 
     // Generate maze based on level
     const mazeData = generateMaze(this.currentLevel);
     const mazeSize = mazeData.length;
     const cellSize = 2;
-    const wallHeight = 4;
+    const wallHeight = 2;
 
+    // Save for overview camera
+    this.mazeSize = mazeSize;
+    this.cellSize = cellSize;
+    this.mazeCenter.set((mazeSize - 1) * cellSize * 0.5, 0, (mazeSize - 1) * cellSize * 0.5);
+
+    // Create ground sized to fully cover the maze (+ margin)
+    const padding = cellSize * 2;
+    const groundWidth = mazeSize * cellSize + padding * 2;
+    const groundDepth = mazeSize * cellSize + padding * 2;
+    const ground = createGround({ width: groundWidth, depth: groundDepth });
+    ground.position.x = this.mazeCenter.x;
+    ground.position.z = this.mazeCenter.z;
+    this.scene.add(ground);
+
+    // Build maze
     this.walls = buildMaze(this.scene, {
       cellSize,
       wallHeight,
@@ -73,12 +98,10 @@ export class GameplayScene {
     });
 
     // Calculate goal position (furthest point from start)
-    // Find the furthest valid position from start (1, 1)
     let goalX = 1;
     let goalZ = 1;
     let maxDistance = 0;
-    
-    // Find furthest path cell from start
+
     for (let z = 1; z < mazeSize - 1; z++) {
       for (let x = 1; x < mazeSize - 1; x++) {
         if (mazeData[z][x] === 0) {
@@ -91,16 +114,25 @@ export class GameplayScene {
         }
       }
     }
-    
+
     this.goal = createGoal({ x: goalX * cellSize, z: goalZ * cellSize });
     this.scene.add(this.goal);
+
+    // Add skybox
+    this.sky = createSkyDome();
+    this.scene.add(this.sky);
 
     // Load player model
     loadPlayerModel(this.scene, (model, mixer, actions) => {
       this.playerData = { model, mixer, actions };
       this.playerData.model.visible = false; // hide mesh in FPS
       this.freeLook = new FreeLook(this.camera);
-      
+
+      // Overview marker (visible only in top-view)
+      this.overviewMarker = this._createOverviewMarker();
+      this.overviewMarker.visible = false;
+      this.scene.add(this.overviewMarker);
+
       // Initialize third-person camera
       this.thirdPersonCamera = new ThirdPersonCamera(this.camera, model, {
         distance: 6,
@@ -114,12 +146,49 @@ export class GameplayScene {
     });
   }
 
+  _createOverviewMarker() {
+    // A small arrow + ring so user can see where player is from top
+    const group = new THREE.Group();
+    group.name = "OverviewMarker";
+
+    const ringGeo = new THREE.RingGeometry(0.35, 0.55, 32);
+    const ringMat = new THREE.MeshBasicMaterial({ color: 0xffff00, side: THREE.DoubleSide });
+    const ring = new THREE.Mesh(ringGeo, ringMat);
+    ring.rotation.x = -Math.PI / 2;
+    ring.position.y = 0.02;
+
+    const coneGeo = new THREE.ConeGeometry(0.25, 0.7, 16);
+    const coneMat = new THREE.MeshBasicMaterial({ color: 0xff2d2d });
+    const cone = new THREE.Mesh(coneGeo, coneMat);
+    cone.position.y = 0.45;
+
+    group.add(ring);
+    group.add(cone);
+    return group;
+  }
+
+  setOverviewMarkerVisible(visible) {
+    if (this.overviewMarker) this.overviewMarker.visible = !!visible;
+  }
+
+  updateOverviewMarker() {
+    if (!this.overviewMarker || !this.playerData?.model) return;
+    // Keep it above player's XZ (player Y can be offset due to bottomOffset)
+    const p = this.playerData.model.position;
+    this.overviewMarker.position.set(p.x, 0.01, p.z);
+  }
+
   createUI() {
     // Level display
     this.levelDisplay = document.createElement("div");
     this.levelDisplay.id = "level-display";
     this.levelDisplay.textContent = `Level ${this.currentLevel}`;
-    
+
+    // Exit button
+    this.exitButton = document.createElement("button");
+    this.exitButton.id = "exit-game-btn";
+    this.exitButton.textContent = "Exit";
+
     const levelStyle = document.createElement("style");
     levelStyle.textContent = `
       #level-display {
@@ -136,6 +205,20 @@ export class GameplayScene {
         font-weight: bold;
         text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.5);
       }
+      #exit-game-btn {
+        position: fixed;
+        top: 20px;
+        right: 20px;
+        font-family: 'Arial', sans-serif;
+        font-size: clamp(1rem, 2.5vw, 1.5rem);
+        color: #ffffff;
+        background: rgba(200, 50, 50, 0.8);
+        padding: 0.8rem 1.5rem;
+        border: none;
+        border-radius: 10px;
+        z-index: 100;
+        cursor: pointer;
+      }
 
       @media (max-width: 768px) {
         #level-display {
@@ -144,10 +227,17 @@ export class GameplayScene {
           padding: 0.6rem 1rem;
           font-size: 0.9rem;
         }
+        #exit-game-btn {
+          top: 10px;
+          right: 10px;
+          padding: 0.6rem 1rem;
+          font-size: 0.9rem;
+        }
       }
     `;
     document.head.appendChild(levelStyle);
     document.body.appendChild(this.levelDisplay);
+    document.body.appendChild(this.exitButton);
 
     // Game complete panel (hidden initially)
     this.gameCompletePanel = document.createElement("div");
@@ -265,6 +355,13 @@ export class GameplayScene {
         this.onLevelComplete(null); // Return to menu
       }
     });
+
+    this.exitButton.addEventListener("click", () => {
+      // Make cursor visible when exiting
+      if (document.pointerLockElement) document.exitPointerLock();
+      document.body.style.cursor = "default";
+      if (this.onLevelComplete) this.onLevelComplete(null);
+    });
   }
 
   updateLevel(level) {
@@ -278,6 +375,9 @@ export class GameplayScene {
   showCompletePanel() {
     if (this.gameCompletePanel) {
       this.gameCompletePanel.classList.add("show");
+
+      // RELEASE POINTER WHEN UI POPS
+      document.exitPointerLock();
     }
   }
 
@@ -289,11 +389,15 @@ export class GameplayScene {
 
   nextLevel() {
     const nextLevelNum = this.currentLevel + 1;
+
+    // SAVE NEXT LEVEL LOCALLY
+    localStorage.setItem("savedLevel", nextLevelNum);
+
     if (this.onLevelComplete) {
       this.onLevelComplete(nextLevelNum);
     }
   }
-
+  
   cleanup() {
     // Remove all objects from scene
     if (this.scene) {
@@ -306,6 +410,10 @@ export class GameplayScene {
     this.playerData = null;
     this.freeLook = null;
     this.thirdPersonCamera = null;
+    this.overviewMarker = null;
+    this.sky = null;
+    if (this.exitButton) this.exitButton.remove();
+
   }
 
   destroy() {
@@ -321,5 +429,50 @@ export class GameplayScene {
   getScene() {
     return this.scene;
   }
-}
 
+  _setupAudio() {
+    // attach listener to camera so sounds are spatial
+    this.audioListener = new THREE.AudioListener();
+    this.camera.add(this.audioListener);
+    const loader = new THREE.AudioLoader();
+
+    this.footstepSound = new THREE.Audio(this.audioListener);
+    loader.load("/sounds/footstep.mp3", (buffer) => {
+      this.footstepSound.setBuffer(buffer);
+      this.footstepSound.setLoop(true);
+      this.footstepSound.setVolume(0.5);
+    });
+
+    this.hungerSound = new THREE.Audio(this.audioListener);
+    loader.load("/sounds/hunger.mp3", (buffer) => {
+      this.hungerSound.setBuffer(buffer);
+      this.hungerSound.setLoop(false);
+      this.hungerSound.setVolume(0.7);
+    });
+
+    // hunger meter initial value
+    this.hunger = 100;
+    this.hungerAlertPlayed = false;
+  }
+
+  update(dt) {
+    // Sky time update + make it behave like a skybox (always around camera)
+    if (this.sky) {
+      if (this.sky?.userData?.update) this.sky.userData.update(dt);
+      if (this.camera) this.sky.position.copy(this.camera.position);
+    }
+  
+    // Existing animation update
+    if (this.playerData?.mixer) this.playerData.mixer.update(dt);
+
+    // hunger decreases over time and plays alert when low
+    if (this.hunger !== undefined) {
+      this.hunger -= dt * 2;
+      if (this.hunger <= 20 && this.hungerSound && !this.hungerAlertPlayed) {
+        this.hungerSound.play();
+        this.hungerAlertPlayed = true;
+      }
+    }
+  }
+  
+}

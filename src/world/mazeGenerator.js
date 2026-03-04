@@ -3,35 +3,51 @@
  * Generates mazes of increasing complexity based on level
  */
 export function generateMaze(level) {
-  // Base size increases with level
-  const baseSize = 7;
-  const size = Math.min(baseSize + Math.floor(level * 1.5), 25); // Max 25x25
-  
-  // Create empty maze (1 = wall, 0 = path)
+  let size = Math.min(11 + level * 2, 41); // bigger, harder
+
+  // Ensure odd size (required for backtracking)
+  if (size % 2 === 0) size++;
+
+  // Fill with walls
   const maze = Array(size).fill(null).map(() => Array(size).fill(1));
-  
-  // Simple maze generation algorithm (recursive backtracking simplified)
-  // Start and end positions
-  const startX = 1;
-  const startZ = 1;
-  const endX = size - 2;
-  const endZ = size - 2;
-  
-  // Create paths using a simple algorithm
-  // First, create a basic path from start to end
-  createPath(maze, startX, startZ, endX, endZ, size);
-  
-  // Add some complexity based on level
-  if (level > 1) {
-    addComplexity(maze, size, level);
+
+  carve(1, 1);
+
+  function carve(x, z) {
+    const dirs = shuffle([
+      [2, 0],  // right
+      [-2, 0], // left
+      [0, 2],  // down
+      [0, -2], // up
+    ]);
+
+    for (const [dx, dz] of dirs) {
+      const nx = x + dx;
+      const nz = z + dz;
+
+      if (nx > 0 && nx < size - 1 && nz > 0 && nz < size - 1 && maze[nz][nx] === 1) {
+        maze[z + dz / 2][x + dx / 2] = 0; // remove inner wall
+        maze[nz][nx] = 0;                // carve cell
+        carve(nx, nz);
+      }
+    }
   }
-  
-  // Ensure start and end are clear
-  maze[startZ][startX] = 0;
-  maze[endZ][endX] = 0;
-  
+
+  // Ensure start + goal open
+  maze[1][1] = 0;
+  maze[size - 2][size - 2] = 0;
+
   return maze;
 }
+
+function shuffle(arr) {
+  for (let i = arr.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [arr[i], arr[j]] = [arr[j], arr[i]];
+  }
+  return arr;
+}
+
 
 function createPath(maze, startX, startZ, endX, endZ, size) {
   // Create a winding path from start to end

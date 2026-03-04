@@ -3,8 +3,8 @@ import { createWall } from "./createWall.js";
 
 export function buildMaze(scene, options = {}) {
   const {
-    cellSize = 2,
-    wallHeight = 2,
+    cellSize = 1,
+    wallHeight = 0.5,
     mazeData = null, // Use provided maze data or fallback to MAZE_LAYOUT
   } = options;
 

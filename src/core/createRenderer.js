@@ -5,5 +5,6 @@ export const createRenderer=()=>{
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     renderer.setSize(window.innerWidth, window.innerHeight);
     renderer.outputColorSpace = THREE.SRGBColorSpace;
+    renderer.sortObjects = true; // Enable render order sorting
     return renderer;
 }
