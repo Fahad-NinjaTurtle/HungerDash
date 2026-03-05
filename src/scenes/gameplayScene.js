@@ -40,10 +40,12 @@ export class GameplayScene {
 
     // Overview marker (shows player position during top-view)
     this.overviewMarker = null;
+    this.winSoundPlayed = false;
   }
 
   init(level = 1) {
     this.currentLevel = level;
+    this.winSoundPlayed = false;
     this.createScene();
     this.createUI();
     
@@ -195,7 +197,7 @@ export class GameplayScene {
         position: fixed;
         top: 20px;
         left: 20px;
-        font-family: 'Arial', sans-serif;
+        font-family: 'Courier New', monospace;
         font-size: clamp(1rem, 2.5vw, 1.5rem);
         color: #ffffff;
         background: rgba(0, 0, 0, 0.6);
@@ -209,7 +211,7 @@ export class GameplayScene {
         position: fixed;
         top: 20px;
         right: 20px;
-        font-family: 'Arial', sans-serif;
+        font-family: 'Courier New', monospace;
         font-size: clamp(1rem, 2.5vw, 1.5rem);
         color: #ffffff;
         background: rgba(200, 50, 50, 0.8);
@@ -238,6 +240,38 @@ export class GameplayScene {
     document.head.appendChild(levelStyle);
     document.body.appendChild(this.levelDisplay);
     document.body.appendChild(this.exitButton);
+
+    // Mobile camera toggle button (hidden on desktop)
+    this.mobileCameraButton = document.createElement("button");
+    this.mobileCameraButton.id = "mobile-camera-btn";
+    this.mobileCameraButton.textContent = "Camera";
+
+    const mobileStyle = document.createElement("style");
+    mobileStyle.textContent = `
+      #mobile-camera-btn {
+        position: fixed;
+        bottom: 20px;
+        right: 20px;
+        font-family: 'Courier New', monospace;
+        font-size: clamp(1rem, 2.5vw, 1.5rem);
+        color: #ffffff;
+        background: rgba(0, 123, 255, 0.8);
+        padding: 0.8rem 1.5rem;
+        border: none;
+        border-radius: 10px;
+        z-index: 100;
+        cursor: pointer;
+        display: none;
+      }
+
+      @media (max-width: 768px) {
+        #mobile-camera-btn {
+          display: block;
+        }
+      }
+    `;
+    document.head.appendChild(mobileStyle);
+    document.body.appendChild(this.mobileCameraButton);
 
     // Game complete panel (hidden initially)
     this.gameCompletePanel = document.createElement("div");
@@ -282,7 +316,7 @@ export class GameplayScene {
       }
 
       .complete-title {
-        font-family: 'Arial', sans-serif;
+        font-family: 'Courier New', monospace;
         font-size: clamp(2rem, 5vw, 3.5rem);
         color: #ffffff;
         margin-bottom: 1rem;
@@ -290,7 +324,7 @@ export class GameplayScene {
       }
 
       .complete-message {
-        font-family: 'Arial', sans-serif;
+        font-family: 'Courier New', monospace;
         font-size: clamp(1rem, 2.5vw, 1.5rem);
         color: #ffffff;
         margin-bottom: 2rem;
@@ -304,7 +338,7 @@ export class GameplayScene {
       }
 
       .complete-button {
-        font-family: 'Arial', sans-serif;
+        font-family: 'Courier New', monospace;
         font-size: clamp(1rem, 2vw, 1.2rem);
         padding: 1rem 2rem;
         background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
@@ -343,6 +377,113 @@ export class GameplayScene {
     document.head.appendChild(completeStyle);
     document.body.appendChild(this.gameCompletePanel);
 
+    // Exit confirmation panel (hidden initially)
+    this.exitConfirmationPanel = document.createElement("div");
+    this.exitConfirmationPanel.id = "exit-confirmation-panel";
+    this.exitConfirmationPanel.innerHTML = `
+      <div class="exit-content">
+        <h2 class="exit-title">Don't you want to end starvation?</h2>
+        <div class="exit-buttons">
+          <button id="exit-yes-btn" class="exit-button">Yes</button>
+          <button id="exit-no-btn" class="exit-button secondary">No</button>
+        </div>
+      </div>
+    `;
+
+    const exitStyle = document.createElement("style");
+    exitStyle.textContent = `
+      #exit-confirmation-panel {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: rgba(0, 0, 0, 0.8);
+        display: none;
+        align-items: center;
+        justify-content: center;
+        z-index: 2100;
+        opacity: 0;
+        transition: opacity 0.3s ease;
+      }
+
+      #exit-confirmation-panel.show {
+        display: flex;
+        opacity: 1;
+      }
+
+      .exit-content {
+        background: #2c3e50;
+        padding: 3rem;
+        border-radius: 20px;
+        border: 2px solid #ecf0f1;
+        text-align: center;
+        max-width: 90%;
+        box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+        transform: scale(0.8);
+        transition: transform 0.3s ease;
+      }
+
+      #exit-confirmation-panel.show .exit-content {
+        transform: scale(1);
+      }
+
+      .exit-title {
+        font-family: 'Courier New', monospace;
+        font-size: clamp(2rem, 5vw, 3.5rem);
+        color: #ffffff;
+        margin-bottom: 2rem;
+        text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.5);
+      }
+
+      .exit-buttons {
+        display: flex;
+        gap: 1rem;
+        justify-content: center;
+      }
+
+      .exit-button {
+        font-family: 'Courier New', monospace;
+        font-size: clamp(1.2rem, 3vw, 2rem);
+        padding: 1rem 2rem;
+        background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+        color: white;
+        border: none;
+        border-radius: 50px;
+        cursor: pointer;
+        box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+        transition: all 0.3s ease;
+        font-weight: bold;
+        text-transform: uppercase;
+        letter-spacing: 2px;
+      }
+
+      .exit-button.secondary {
+        background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
+      }
+
+      .exit-button:hover {
+        transform: translateY(-3px);
+        box-shadow: 0 15px 40px rgba(0, 0, 0, 0.4);
+      }
+
+      @media (max-width: 768px) {
+        .exit-content {
+          padding: 2rem 1.5rem;
+        }
+
+        .exit-buttons {
+          flex-direction: column;
+        }
+
+        .exit-button {
+          width: 100%;
+        }
+      }
+    `;
+    document.head.appendChild(exitStyle);
+    document.body.appendChild(this.exitConfirmationPanel);
+
     // Event listeners
     document.getElementById("next-level-btn").addEventListener("click", () => {
       this.hideCompletePanel();
@@ -357,10 +498,26 @@ export class GameplayScene {
     });
 
     this.exitButton.addEventListener("click", () => {
-      // Make cursor visible when exiting
+      this.showExitConfirmationPanel();
+    });
+
+    document.getElementById("exit-yes-btn").addEventListener("click", () => {
+      this.hideExitConfirmationPanel();
+      // Resume game
+    });
+
+    document.getElementById("exit-no-btn").addEventListener("click", () => {
+      this.hideExitConfirmationPanel();
+      // Exit game
       if (document.pointerLockElement) document.exitPointerLock();
       document.body.style.cursor = "default";
       if (this.onLevelComplete) this.onLevelComplete(null);
+    });
+
+    this.mobileCameraButton.addEventListener("click", () => {
+      this.isFPS = !this.isFPS;
+      // Update button text
+      this.mobileCameraButton.textContent = this.isFPS ? "3rd Person" : "FPS";
     });
   }
 
@@ -384,6 +541,18 @@ export class GameplayScene {
   hideCompletePanel() {
     if (this.gameCompletePanel) {
       this.gameCompletePanel.classList.remove("show");
+    }
+  }
+
+  showExitConfirmationPanel() {
+    if (this.exitConfirmationPanel) {
+      this.exitConfirmationPanel.classList.add("show");
+    }
+  }
+
+  hideExitConfirmationPanel() {
+    if (this.exitConfirmationPanel) {
+      this.exitConfirmationPanel.classList.remove("show");
     }
   }
 
@@ -413,6 +582,8 @@ export class GameplayScene {
     this.overviewMarker = null;
     this.sky = null;
     if (this.exitButton) this.exitButton.remove();
+    if (this.exitConfirmationPanel) this.exitConfirmationPanel.remove();
+    if (this.mobileCameraButton) this.mobileCameraButton.remove();
 
   }
 
@@ -423,6 +594,12 @@ export class GameplayScene {
     }
     if (this.gameCompletePanel) {
       this.gameCompletePanel.remove();
+    }
+    if (this.exitConfirmationPanel) {
+      this.exitConfirmationPanel.remove();
+    }
+    if (this.mobileCameraButton) {
+      this.mobileCameraButton.remove();
     }
   }
 
@@ -437,17 +614,25 @@ export class GameplayScene {
     const loader = new THREE.AudioLoader();
 
     this.footstepSound = new THREE.Audio(this.audioListener);
-    loader.load("/sounds/footstep.mp3", (buffer) => {
+    loader.load(import.meta.env.BASE_URL + "sounds/footstep.mp3", (buffer) => {
       this.footstepSound.setBuffer(buffer);
       this.footstepSound.setLoop(true);
       this.footstepSound.setVolume(0.5);
     });
 
     this.hungerSound = new THREE.Audio(this.audioListener);
-    loader.load("/sounds/hunger.mp3", (buffer) => {
+    loader.load(import.meta.env.BASE_URL + "sounds/hunger.mp3", (buffer) => {
       this.hungerSound.setBuffer(buffer);
       this.hungerSound.setLoop(false);
       this.hungerSound.setVolume(0.7);
+    });
+
+    this.eatSound = new THREE.Audio(this.audioListener);
+    // Assuming there's an eat.mp3 or similar, or use hunger.mp3 for now
+    loader.load(import.meta.env.BASE_URL + "sounds/hunger.mp3", (buffer) => {
+      this.eatSound.setBuffer(buffer);
+      this.eatSound.setLoop(false);
+      this.eatSound.setVolume(0.8);
     });
 
     // hunger meter initial value

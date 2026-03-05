@@ -3,7 +3,7 @@ import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 
 export function createGoal(
   position = { x: 10, z: 10 },
-  modelPath = "/models/goal.glb" // default location inside public/
+  modelPath = import.meta.env.BASE_URL + "models/goal.glb" // default location inside public/
 ) {
   const group = new THREE.Group();
   group.position.set(position.x, 0, position.z);

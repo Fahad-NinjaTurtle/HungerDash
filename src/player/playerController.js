@@ -94,20 +94,31 @@ export function movePlayerAnimated(
   newPosition.x += moveDir.x * speed * dt;
   newPosition.z += moveDir.z * speed * dt;
 
-  // Collision
-  const playerBox = new THREE.Box3().setFromCenterAndSize(
-    newPosition,
+  // Collision - check each axis separately for sliding
+  const playerBoxX = new THREE.Box3().setFromCenterAndSize(
+    new THREE.Vector3(newPosition.x, newPosition.y, model.position.z),
+    new THREE.Vector3(0.8, 1.8, 0.8)
+  );
+  const playerBoxZ = new THREE.Box3().setFromCenterAndSize(
+    new THREE.Vector3(model.position.x, newPosition.y, newPosition.z),
     new THREE.Vector3(0.8, 1.8, 0.8)
   );
 
+  let canMoveX = true;
+  let canMoveZ = true;
+
   for (const wall of walls) {
     const wallBox = new THREE.Box3().setFromObject(wall);
-    if (playerBox.intersectsBox(wallBox)) {
-      if (moveDir.x !== 0) newPosition.x = model.position.x;
-      if (moveDir.z !== 0) newPosition.z = model.position.z;
-      break;
+    if (canMoveX && playerBoxX.intersectsBox(wallBox)) {
+      canMoveX = false;
+    }
+    if (canMoveZ && playerBoxZ.intersectsBox(wallBox)) {
+      canMoveZ = false;
     }
   }
+
+  if (!canMoveX) newPosition.x = model.position.x;
+  if (!canMoveZ) newPosition.z = model.position.z;
 
   model.position.copy(newPosition);
 

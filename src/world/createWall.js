@@ -8,7 +8,7 @@ let wallMaterial = null;
 function loadGrassTexture() {
   if (!grassTexture) {
     const textureLoader = new TextureLoader();
-    grassTexture = textureLoader.load("/Textures/grass.jpg");
+    grassTexture = textureLoader.load(import.meta.env.BASE_URL + "Textures/grass.jpg");
     
     // Configure texture
     grassTexture.wrapS = THREE.RepeatWrapping;

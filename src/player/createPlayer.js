@@ -4,7 +4,7 @@ import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 export function loadPlayerModel(scene, onLoad) {
   const loader = new GLTFLoader();
 
-  loader.load("/models/character.glb", (gltf) => {
+  loader.load(import.meta.env.BASE_URL + "models/character.glb", (gltf) => {
 
     const model = gltf.scene;
     // Scale down the player to make them shorter

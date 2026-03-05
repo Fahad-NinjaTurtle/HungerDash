@@ -25,8 +25,8 @@ export class ThirdPersonCamera {
     // Camera state
     this.yaw = 0; // Horizontal rotation around target
     this.pitch = Math.PI / 6; // Vertical angle (0 = horizontal, PI/2 = above)
-    this.pitchMin = 0.1;
-    this.pitchMax = Math.PI / 2.2;
+    this.pitchMin = Math.PI / 6; // Limit to 30 degrees up
+    this.pitchMax = Math.PI / 3; // Limit to 60 degrees down
     
     // Smoothing
     this.currentDistance = this.distance;
@@ -39,6 +39,7 @@ export class ThirdPersonCamera {
     this.isPointerLocked = false;
     this.initPointerLock();
     this.initMouseMove();
+    this.initTouchMove();
   }
   
   initPointerLock() {
@@ -52,8 +53,36 @@ export class ThirdPersonCamera {
       if (!this.isPointerLocked) return;
       
       this.yaw -= e.movementX * this.sensitivity;
+      this.yaw = Math.max(-Math.PI, Math.min(Math.PI, this.yaw));
       this.pitch -= e.movementY * this.sensitivity;
       this.pitch = Math.max(this.pitchMin, Math.min(this.pitchMax, this.pitch));
+    });
+  }
+
+  initTouchMove() {
+    let lastTouchX = 0;
+    let lastTouchY = 0;
+
+    document.addEventListener("touchstart", (e) => {
+      if (e.touches.length === 1) {
+        lastTouchX = e.touches[0].clientX;
+        lastTouchY = e.touches[0].clientY;
+      }
+    });
+
+    document.addEventListener("touchmove", (e) => {
+      if (e.touches.length === 1) {
+        const deltaX = e.touches[0].clientX - lastTouchX;
+        const deltaY = e.touches[0].clientY - lastTouchY;
+
+        this.yaw -= deltaX * this.sensitivity * 0.5; // Reduce sensitivity for touch
+        this.yaw = Math.max(-Math.PI, Math.min(Math.PI, this.yaw));
+        this.pitch -= deltaY * this.sensitivity * 0.5;
+        this.pitch = Math.max(this.pitchMin, Math.min(this.pitchMax, this.pitch));
+
+        lastTouchX = e.touches[0].clientX;
+        lastTouchY = e.touches[0].clientY;
+      }
     });
   }
   

@@ -159,47 +159,58 @@ function updateGameplay(dt) {
   const freeLook = gameplayScene.freeLook;
   const thirdPersonCamera = gameplayScene.thirdPersonCamera;
 
-  // Q: show top-down maze view for 3 seconds (no movement)
-  if (keys.q && !overviewMode.active) {
-    overviewMode.active = true;
-    keys.q = false; // consume key press
-
-    setMovementLocked(true);
-
-    overviewMode.savedPos = camera.position.clone();
-    overviewMode.savedQuat = camera.quaternion.clone();
-
-    // compute a bounding area containing both player and goal
-    const playerPos = gameplayScene.playerData?.model.position || new THREE.Vector3();
-    const goalPos = gameplayScene.goal ? gameplayScene.goal.position : new THREE.Vector3();
-    const mid = new THREE.Vector3().addVectors(playerPos, goalPos).multiplyScalar(0.5);
-
-    // determine required height based on distance between them
-    const dist = playerPos.distanceTo(goalPos);
-    // field of view of camera determines height; assume perspective fov in radians
-    const fov = (camera.fov || 75) * (Math.PI / 180);
-    const height = Math.max(12, dist / Math.tan(fov / 2) + 5);
-
-    camera.position.set(mid.x, height, mid.z);
-    camera.lookAt(mid.x, 0, mid.z);
-
-    // still show overview marker as before
-    gameplayScene.setOverviewMarkerVisible?.(true);
-
-    if (overviewMode.restoreTimeout) clearTimeout(overviewMode.restoreTimeout);
-    overviewMode.restoreTimeout = setTimeout(() => {
+  // Q: toggle top-down maze view
+  if (keys.q) {
+    if (overviewMode.active) {
+      // Return to main camera early
       overviewMode.active = false;
       setMovementLocked(false);
-
       gameplayScene?.setOverviewMarkerVisible?.(false);
-
       if (overviewMode.savedPos && overviewMode.savedQuat) {
         camera.position.copy(overviewMode.savedPos);
         camera.quaternion.copy(overviewMode.savedQuat);
       }
+      if (overviewMode.restoreTimeout) {
+        clearTimeout(overviewMode.restoreTimeout);
+        overviewMode.restoreTimeout = null;
+      }
+    } else {
+      // Activate top view for 3 seconds
+      overviewMode.active = true;
+      setMovementLocked(true);
+      overviewMode.savedPos = camera.position.clone();
+      overviewMode.savedQuat = camera.quaternion.clone();
 
-      overviewMode.restoreTimeout = null;
-    }, 3000);
+      // compute a bounding area containing both player and goal
+      const playerPos = gameplayScene.playerData?.model.position || new THREE.Vector3();
+      const goalPos = gameplayScene.goal ? gameplayScene.goal.position : new THREE.Vector3();
+      const mid = new THREE.Vector3().addVectors(playerPos, goalPos).multiplyScalar(0.5);
+
+      // determine required height based on distance between them
+      const dist = playerPos.distanceTo(goalPos);
+      // field of view of camera determines height; assume perspective fov in radians
+      const fov = (camera.fov || 75) * (Math.PI / 180);
+      const height = Math.max(12, dist / Math.tan(fov / 2) + 5);
+
+      camera.position.set(mid.x, height, mid.z);
+      camera.lookAt(mid.x, 0, mid.z);
+
+      // still show overview marker as before
+      gameplayScene.setOverviewMarkerVisible?.(true);
+
+      if (overviewMode.restoreTimeout) clearTimeout(overviewMode.restoreTimeout);
+      overviewMode.restoreTimeout = setTimeout(() => {
+        overviewMode.active = false;
+        setMovementLocked(false);
+        gameplayScene?.setOverviewMarkerVisible?.(false);
+        if (overviewMode.savedPos && overviewMode.savedQuat) {
+          camera.position.copy(overviewMode.savedPos);
+          camera.quaternion.copy(overviewMode.savedQuat);
+        }
+        overviewMode.restoreTimeout = null;
+      }, 3000);
+    }
+    keys.q = false; // consume key press
   }
 
   if (overviewMode.active) {
@@ -246,6 +257,10 @@ function updateGameplay(dt) {
 
   // Check win
   if (checkWin(playerData.model, gameplayScene.goal)) {
+    if (!gameplayScene.winSoundPlayed) {
+      gameplayScene.eatSound?.play();
+      gameplayScene.winSoundPlayed = true;
+    }
     gameplayScene.showCompletePanel();
     setMovementLocked(true);
 

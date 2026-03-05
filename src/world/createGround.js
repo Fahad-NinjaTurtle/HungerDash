@@ -18,7 +18,7 @@ export const createGround = (opts = {}) => {
 
   // Load floor texture
   const textureLoader = new TextureLoader();
-  const floorTexture = textureLoader.load("/Textures/floor.jpg");
+  const floorTexture = textureLoader.load(import.meta.env.BASE_URL + "Textures/floor.jpg");
 
   // Configure texture
   floorTexture.wrapS = THREE.RepeatWrapping;

@@ -20,8 +20,8 @@ export class MainMenuScene {
     this.container.innerHTML = `
       <div class="menu-background"></div>
       <div class="menu-content">
-        <h1 class="menu-title">Reach to the food before starvation make you dead</h1>
-        <button id="start-button" class="start-button">Start Game</button>
+        <h1 class="menu-title">Find food before starvation claims you.</h1>
+        <button id="start-button" class="start-button">Begin Survival</button>
       </div>
     `;
 
@@ -46,9 +46,7 @@ export class MainMenuScene {
         left: 0;
         width: 100%;
         height: 100%;
-        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-        background-size: cover;
-        background-position: center;
+        background: url('/Images/bgImage.png') center/cover no-repeat;
         opacity: 0.9;
       }
 
@@ -61,7 +59,7 @@ export class MainMenuScene {
       }
 
       .menu-title {
-        font-family: 'Arial', sans-serif;
+        font-family: 'Courier New', monospace;
         font-size: clamp(1.5rem, 4vw, 3rem);
         font-weight: bold;
         color: #ffffff;
@@ -71,7 +69,7 @@ export class MainMenuScene {
       }
 
       .start-button {
-        font-family: 'Arial', sans-serif;
+        font-family: 'Courier New', monospace;
         font-size: clamp(1.2rem, 3vw, 2rem);
         padding: 1rem 3rem;
         background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
