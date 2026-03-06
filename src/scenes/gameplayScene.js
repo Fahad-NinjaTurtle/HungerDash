@@ -31,7 +31,15 @@ export class GameplayScene {
     this.currentAnimation = null;
     this.targetPlayerRotation = 0;
     this.gameCompletePanel = null;
+    this.gameOverPanel = null;
     this.levelDisplay = null;
+    this.hungerContainer = null;
+    this.hungerBar = null;
+    this.hungerOverlay = null;
+    this.maxHunger = 100;
+    this.hungerRate = 2; // units per second
+    this.hunger = 0;
+    this.hungerAlertPlayed = false;
 
     // Maze info (used by overview camera)
     this.mazeCenter = new THREE.Vector3(0, 0, 0);
@@ -41,14 +49,16 @@ export class GameplayScene {
     // Overview marker (shows player position during top-view)
     this.overviewMarker = null;
     this.winSoundPlayed = false;
+    this.gameEnded = false; // flag to prevent multiple end-game triggers
   }
 
   init(level = 1) {
-    this.currentLevel = level;
+    // make level-specific adjustments including hunger settings
+    this.updateLevel(level);
+
     this.winSoundPlayed = false;
     this.createScene();
     this.createUI();
-    
   }
 
   createScene() {
@@ -127,15 +137,28 @@ export class GameplayScene {
     // Load player model
     loadPlayerModel(this.scene, (model, mixer, actions) => {
       this.playerData = { model, mixer, actions };
+      // start player facing +X direction (90°) instead of the default -Z
+      const initialYaw = -Math.PI / 2; // rotate rightwards
+      model.rotation.y = initialYaw;
+      // keep the same rotation when we animate in third person
+      this.targetPlayerRotation = initialYaw;
+
       this.playerData.model.visible = false; // hide mesh in FPS
-      this.freeLook = new FreeLook(this.camera);
+
+      // create freelook with tighter vertical limits and default heading
+      this.freeLook = new FreeLook(this.camera, {
+        initialYaw: initialYaw,
+        initialPitch: 0,               // straight ahead
+        pitchMin: -Math.PI / 3,        // ~60° up
+        pitchMax: Math.PI / 3,         // ~60° down
+      });
 
       // Overview marker (visible only in top-view)
       this.overviewMarker = this._createOverviewMarker();
       this.overviewMarker.visible = false;
       this.scene.add(this.overviewMarker);
 
-      // Initialize third-person camera
+      // Initialize third-person camera with same starting heading
       this.thirdPersonCamera = new ThirdPersonCamera(this.camera, model, {
         distance: 6,
         minDistance: 1.5,
@@ -143,6 +166,8 @@ export class GameplayScene {
         height: 3,
         sensitivity: 0.002,
         rotationSpeed: 0.25,
+        initialYaw: initialYaw,
+        // keep the original pitch range (30°–60°)
       });
       this.thirdPersonCamera.setCollisionObjects(this.walls);
     });
@@ -186,6 +211,16 @@ export class GameplayScene {
     this.levelDisplay.id = "level-display";
     this.levelDisplay.textContent = `Level ${this.currentLevel}`;
 
+    // Hunger bar container + overlay
+    this.hungerContainer = document.createElement("div");
+    this.hungerContainer.id = "hunger-container";
+    this.hungerBar = document.createElement("div");
+    this.hungerBar.id = "hunger-bar";
+    this.hungerContainer.appendChild(this.hungerBar);
+
+    this.hungerOverlay = document.createElement("div");
+    this.hungerOverlay.id = "hunger-overlay";
+
     // Exit button
     this.exitButton = document.createElement("button");
     this.exitButton.id = "exit-game-btn";
@@ -206,6 +241,36 @@ export class GameplayScene {
         z-index: 100;
         font-weight: bold;
         text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.5);
+      }
+      #hunger-container {
+        position: fixed;
+        top: 20px;
+        left: 50%;
+        transform: translateX(-50%);
+        width: 40%;
+        height: 20px;
+        background: rgba(255,255,255,0.1);
+        border: 2px solid #fff;
+        border-radius: 10px;
+        z-index: 100;
+      }
+      #hunger-bar {
+        width: 0%;
+        height: 100%;
+        background: linear-gradient(90deg, #ffeb3b, #f44336);
+        border-radius: 8px;
+        transition: width 0.1s linear;
+      }
+      #hunger-overlay {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: radial-gradient(circle at center, transparent 40%, rgba(255,0,0,0) 70%);
+        pointer-events: none;
+        z-index: 150;
+        transition: background 0.2s ease;
       }
       #exit-game-btn {
         position: fixed;
@@ -229,6 +294,10 @@ export class GameplayScene {
           padding: 0.6rem 1rem;
           font-size: 0.9rem;
         }
+        #hunger-container {
+          width: 60%;
+          top: 10px;
+        }
         #exit-game-btn {
           top: 10px;
           right: 10px;
@@ -239,6 +308,10 @@ export class GameplayScene {
     `;
     document.head.appendChild(levelStyle);
     document.body.appendChild(this.levelDisplay);
+    document.body.appendChild(this.hungerContainer);
+    // force initial width zero to avoid transition artifact
+    if (this.hungerBar) this.hungerBar.style.width = "0%";
+    document.body.appendChild(this.hungerOverlay);
     document.body.appendChild(this.exitButton);
 
     // Mobile camera toggle button (hidden on desktop)
@@ -286,6 +359,87 @@ export class GameplayScene {
         </div>
       </div>
     `;
+
+    // Game over panel (hunger)
+    this.gameOverPanel = document.createElement("div");
+    this.gameOverPanel.id = "game-over-panel";
+    this.gameOverPanel.innerHTML = `
+      <div class="over-content">
+        <h2 class="over-title">Hunger Claims You</h2>
+        <p class="over-message">You starved to death...</p>
+        <div class="over-buttons">
+          <button id="retry-btn" class="over-button">Retry</button>
+          <button id="home-btn" class="over-button secondary">Main Menu</button>
+        </div>
+      </div>
+    `;
+    const overStyle = document.createElement("style");
+    overStyle.textContent = `
+      #game-over-panel {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: rgba(0, 0, 0, 0.9);
+        display: none;
+        align-items: center;
+        justify-content: center;
+        z-index: 2200;
+      }
+      #game-over-panel.show {
+        display: flex;
+      }
+      .over-content {
+        background: #2c3e50;
+        padding: 3rem;
+        border-radius: 20px;
+        text-align: center;
+        max-width: 90%;
+        box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+      }
+      .over-title {
+        font-family: 'Courier New', monospace;
+        font-size: clamp(2rem, 5vw, 3.5rem);
+        color: #e74c3c;
+        margin-bottom: 1rem;
+        text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.5);
+      }
+      .over-message {
+        font-family: 'Courier New', monospace;
+        font-size: clamp(1rem, 2.5vw, 1.5rem);
+        color: #ffffff;
+        margin-bottom: 2rem;
+      }
+      .over-buttons {
+        display: flex;
+        gap: 1rem;
+        justify-content: center;
+        flex-wrap: wrap;
+      }
+      .over-button {
+        font-family: 'Courier New', monospace;
+        font-size: clamp(1rem, 2vw, 1.2rem);
+        padding: 1rem 2rem;
+        background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+        color: white;
+        border: none;
+        border-radius: 50px;
+        cursor: pointer;
+        transition: all 0.3s ease;
+        font-weight: bold;
+        text-transform: uppercase;
+      }
+      .over-button.secondary {
+        background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
+      }
+      .over-button:hover {
+        transform: translateY(-3px);
+        box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+      }
+    `;
+    document.head.appendChild(overStyle);
+    document.body.appendChild(this.gameOverPanel);
 
     const completeStyle = document.createElement("style");
     completeStyle.textContent = `
@@ -519,6 +673,16 @@ export class GameplayScene {
       // Update button text
       this.mobileCameraButton.textContent = this.isFPS ? "3rd Person" : "FPS";
     });
+
+    // game over panel buttons
+    document.getElementById("retry-btn").addEventListener("click", () => {
+      this.hideGameOverPanel();
+      if (this.onLevelComplete) this.onLevelComplete(this.currentLevel);
+    });
+    document.getElementById("home-btn").addEventListener("click", () => {
+      this.hideGameOverPanel();
+      if (this.onLevelComplete) this.onLevelComplete(null);
+    });
   }
 
   updateLevel(level) {
@@ -526,12 +690,27 @@ export class GameplayScene {
     if (this.levelDisplay) {
       this.levelDisplay.textContent = `Level ${this.currentLevel}`;
     }
+    // adjust hunger parameters based on level/difficulty
+    this.maxHunger = 80 + this.currentLevel * 15; // make harder as level increases
+    this.hungerRate = (1.5 + this.currentLevel * 0.5) * 0.5; // slower by half
+    this.hunger = 0;
+    this.hungerAlertPlayed = false;
+    this.gameEnded = false; // reset when level starts
+
     this.createScene();
   }
 
   showCompletePanel() {
     if (this.gameCompletePanel) {
       this.gameCompletePanel.classList.add("show");
+
+      // Stop audio
+      if (this.hungerSound && this.hungerSound.isPlaying) {
+        this.hungerSound.stop();
+      }
+      if (this.footstepSound && this.footstepSound.isPlaying) {
+        this.footstepSound.stop();
+      }
 
       // RELEASE POINTER WHEN UI POPS
       document.exitPointerLock();
@@ -553,6 +732,18 @@ export class GameplayScene {
   hideExitConfirmationPanel() {
     if (this.exitConfirmationPanel) {
       this.exitConfirmationPanel.classList.remove("show");
+    }
+  }
+
+  showGameOverPanel() {
+    if (this.gameOverPanel) {
+      this.gameOverPanel.classList.add("show");
+    }
+  }
+
+  hideGameOverPanel() {
+    if (this.gameOverPanel) {
+      this.gameOverPanel.classList.remove("show");
     }
   }
 
@@ -584,6 +775,9 @@ export class GameplayScene {
     if (this.exitButton) this.exitButton.remove();
     if (this.exitConfirmationPanel) this.exitConfirmationPanel.remove();
     if (this.mobileCameraButton) this.mobileCameraButton.remove();
+    if (this.hungerContainer) this.hungerContainer.remove();
+    if (this.hungerOverlay) this.hungerOverlay.remove();
+    if (this.gameOverPanel) this.gameOverPanel.remove();
 
   }
 
@@ -628,19 +822,20 @@ export class GameplayScene {
     });
 
     this.eatSound = new THREE.Audio(this.audioListener);
-    // Assuming there's an eat.mp3 or similar, or use hunger.mp3 for now
-    loader.load(import.meta.env.BASE_URL + "sounds/hunger.mp3", (buffer) => {
+    loader.load(import.meta.env.BASE_URL + "sounds/eat.mp3", (buffer) => {
       this.eatSound.setBuffer(buffer);
       this.eatSound.setLoop(false);
       this.eatSound.setVolume(0.8);
     });
 
-    // hunger meter initial value
-    this.hunger = 100;
-    this.hungerAlertPlayed = false;
+    // (hunger state is managed elsewhere; updateLevel resets values)
+    // this.hunger and hungerAlertPlayed are initialized when level is set.
   }
 
   update(dt) {
+    // protect against huge dt spikes (e.g. when switching scenes)
+    if (dt > 0.1) dt = 0.1;
+
     // Sky time update + make it behave like a skybox (always around camera)
     if (this.sky) {
       if (this.sky?.userData?.update) this.sky.userData.update(dt);
@@ -650,13 +845,38 @@ export class GameplayScene {
     // Existing animation update
     if (this.playerData?.mixer) this.playerData.mixer.update(dt);
 
-    // hunger decreases over time and plays alert when low
-    if (this.hunger !== undefined) {
-      this.hunger -= dt * 2;
-      if (this.hunger <= 20 && this.hungerSound && !this.hungerAlertPlayed) {
+    // hunger increases over time; reach max = game over (but skip if game ended)
+    if (!this.gameEnded && this.hunger !== undefined) {
+      this.hunger += dt * this.hungerRate;
+      // update bar width
+      if (this.hungerBar) {
+        const pct = Math.min(1, this.hunger / this.maxHunger) * 100;
+        this.hungerBar.style.width = pct + "%";
+      }
+
+      // overlay effect when near empty (vignette on sides, only after 70%)
+      if (this.hungerOverlay) {
+        const alpha = this.hunger >= this.maxHunger * 0.7 ? Math.min(1, (this.hunger - this.maxHunger * 0.7) / (this.maxHunger * 0.3)) * 0.8 : 0;
+        this.hungerOverlay.style.background = `radial-gradient(circle at center, transparent 40%, rgba(255,0,0,${alpha}) 70%)`;
+      }
+
+      // play warning sound when >80% (but only if game hasn't ended)
+      if (
+        !this.gameEnded &&
+        this.hunger >= this.maxHunger * 0.8 &&
+        this.hungerSound &&
+        !this.hungerAlertPlayed
+      ) {
         this.hungerSound.play();
         this.hungerAlertPlayed = true;
       }
+
+      // Game over check moved to main.js to prioritize win
+    }
+
+    // Rotate goal
+    if (this.goal) {
+      this.goal.rotation.y += dt * 2; // Rotate at 2 radians per second
     }
   }
   

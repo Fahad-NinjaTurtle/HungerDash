@@ -1,14 +1,29 @@
 import * as THREE from "three";
 
 export class FreeLook {
-  constructor(camera, domElement = document.body) {
+  /**
+   * @param {THREE.Camera} camera
+   * @param {Object} [options]
+   * @param {HTMLElement} [options.domElement=document.body]
+   * @param {number} [options.initialYaw=0] radians around Y axis (horizontal orientation)
+   * @param {number} [options.initialPitch=0] radians (vertical orientation)
+   * @param {number} [options.pitchMin=-PI/2] minimum pitch (look up limit)
+   * @param {number} [options.pitchMax=PI/2] maximum pitch (look down limit)
+   * @param {number} [options.sensitivity=0.002]
+   */
+  constructor(camera, options = {}) {
     this.camera = camera;
-    this.domElement = domElement;
+    this.domElement = options.domElement || document.body;
 
-    this.pitch = 0; // up/down
-    this.yaw = 0;   // left/right
+    // orientation state
+    this.yaw = options.initialYaw || 0;   // left/right
+    this.pitch = options.initialPitch || 0; // up/down
 
-    this.sensitivity = 0.002;
+    // vertical look limits
+    this.pitchMin = options.pitchMin !== undefined ? options.pitchMin : -Math.PI / 2;
+    this.pitchMax = options.pitchMax !== undefined ? options.pitchMax : Math.PI / 2;
+
+    this.sensitivity = options.sensitivity !== undefined ? options.sensitivity : 0.002;
     this.isPointerLocked = false;
 
     this.initPointerLock();
@@ -30,7 +45,8 @@ export class FreeLook {
       if (!this.isPointerLocked) return;
       this.yaw -= e.movementX * this.sensitivity;
       this.pitch -= e.movementY * this.sensitivity;
-      this.pitch = Math.max(-Math.PI / 2, Math.min(Math.PI / 2, this.pitch));
+      // clamp using configured limits
+      this.pitch = Math.max(this.pitchMin, Math.min(this.pitchMax, this.pitch));
     });
   }
 

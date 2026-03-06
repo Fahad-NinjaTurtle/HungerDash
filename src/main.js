@@ -54,6 +54,12 @@ function init() {
 function showMainMenu() {
   currentScene = "menu";
 
+  // make the WebGL canvas invisible so the maze can't peek through
+  if (renderer && renderer.domElement) {
+    renderer.domElement.style.display = "none";
+    renderer.clear();
+  }
+
   // Ensure cursor visible in menus
   if (document.pointerLockElement) document.exitPointerLock();
   document.body.style.cursor = "default";
@@ -78,6 +84,12 @@ function showMainMenu() {
 }
 
 function startGameplay(level) {
+  // make sure the canvas is visible again
+  if (renderer && renderer.domElement) {
+    renderer.domElement.style.display = "block";
+    renderer.clear(); // clear any leftover rendering
+  }
+
   // Cleanup previous gameplay scene (important when advancing levels)
   if (gameplayScene) {
     if (gameplayScene._removePointerLockListener) gameplayScene._removePointerLockListener();
@@ -181,16 +193,12 @@ function updateGameplay(dt) {
       overviewMode.savedPos = camera.position.clone();
       overviewMode.savedQuat = camera.quaternion.clone();
 
-      // compute a bounding area containing both player and goal
-      const playerPos = gameplayScene.playerData?.model.position || new THREE.Vector3();
-      const goalPos = gameplayScene.goal ? gameplayScene.goal.position : new THREE.Vector3();
-      const mid = new THREE.Vector3().addVectors(playerPos, goalPos).multiplyScalar(0.5);
+      // compute a bounding area containing the entire maze
+      const mazeSize = gameplayScene.mazeSize * gameplayScene.cellSize; // ~42 units
+      const mid = new THREE.Vector3(mazeSize / 2, 0, mazeSize / 2);
 
-      // determine required height based on distance between them
-      const dist = playerPos.distanceTo(goalPos);
-      // field of view of camera determines height; assume perspective fov in radians
-      const fov = (camera.fov || 75) * (Math.PI / 180);
-      const height = Math.max(12, dist / Math.tan(fov / 2) + 5);
+      // fixed height to show whole maze a bit farther
+      const height = 35;
 
       camera.position.set(mid.x, height, mid.z);
       camera.lookAt(mid.x, 0, mid.z);
@@ -255,8 +263,16 @@ function updateGameplay(dt) {
   // play footstep/audio based on current input
   handleMovementAudio(dt);
 
-  // Check win
-  if (checkWin(playerData.model, gameplayScene.goal)) {
+  // Add camera stagger when hunger is high (but only if game hasn't ended)
+  if (!gameplayScene.gameEnded && gameplayScene.hunger >= gameplayScene.maxHunger * 0.7) {
+    const shakeIntensity = 0.02;
+    camera.position.x += (Math.random() - 0.5) * shakeIntensity;
+    camera.position.z += (Math.random() - 0.5) * shakeIntensity;
+  }
+
+  // Check win first to prevent game over if won in same frame
+  if (!gameplayScene.gameEnded && checkWin(playerData.model, gameplayScene.goal)) {
+    gameplayScene.gameEnded = true; // mark game as ended
     if (!gameplayScene.winSoundPlayed) {
       gameplayScene.eatSound?.play();
       gameplayScene.winSoundPlayed = true;
@@ -274,6 +290,13 @@ function updateGameplay(dt) {
     // Reset player position
     const bottomOffset = playerData.model.userData.bottomOffset || 0;
     playerData.model.position.set(2, -bottomOffset, 2);
+  } else if (!gameplayScene.gameEnded && gameplayScene.hunger >= gameplayScene.maxHunger) {
+    // Only check game over if game hasn't ended yet
+    gameplayScene.gameEnded = true; // mark game as ended
+    gameplayScene.showGameOverPanel();
+    setMovementLocked(true);
+    if (document.pointerLockElement) document.exitPointerLock();
+    document.body.style.cursor = "default";
   }
 
   renderer.render(scene, camera);
@@ -370,14 +393,26 @@ function maybeEnableMobile() {
 function handleMovementAudio(dt) {
   if (!gameplayScene) return;
   // Don't play footstep sounds in overview mode
-  if (overviewMode.active) return;
+  if (overviewMode.active) {
+    const f = gameplayScene.footstepSound;
+    if (f && f.isPlaying) f.stop();
+    handleMovementAudio.lastFootstepTime = 0;
+    return;
+  }
   
   const moving = keys.w || keys.a || keys.s || keys.d;
   const f = gameplayScene.footstepSound;
-  if (moving && f && !f.isPlaying) {
-    f.play();
+  if (moving && f) {
+    // Play 1 footstep per second while moving
+    if (!handleMovementAudio.lastFootstepTime) handleMovementAudio.lastFootstepTime = 0;
+    handleMovementAudio.lastFootstepTime += dt;
+    if (handleMovementAudio.lastFootstepTime >= 1.0 && !f.isPlaying) {
+      f.play();
+      handleMovementAudio.lastFootstepTime = 0;
+    }
   } else if (!moving && f && f.isPlaying) {
     f.stop();
+    handleMovementAudio.lastFootstepTime = 0;
   }
 }
 

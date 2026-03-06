@@ -9,6 +9,22 @@ import * as THREE from "three";
  * - Smooth interpolation for camera movement
  */
 export class ThirdPersonCamera {
+  /**
+   * @param {THREE.Camera} camera
+   * @param {THREE.Object3D} target object to orbit around (usually the player model)
+   * @param {Object} [options]
+   * @param {number} [options.distance=6]
+   * @param {number} [options.minDistance=1.5]
+   * @param {number} [options.maxDistance=8]
+   * @param {number} [options.height=3]
+   * @param {number} [options.sensitivity=0.002]
+   * @param {number} [options.rotationSpeed=0.15]
+   * @param {number} [options.collisionRadius=0.5]
+   * @param {number} [options.initialYaw=0] radians around Y axis
+   * @param {number} [options.initialPitch=Math.PI/6] vertical starting angle
+   * @param {number} [options.pitchMin=Math.PI/6]
+   * @param {number} [options.pitchMax=Math.PI/3]
+   */
   constructor(camera, target, options = {}) {
     this.camera = camera;
     this.target = target;
@@ -23,10 +39,10 @@ export class ThirdPersonCamera {
     this.collisionRadius = options.collisionRadius || 0.5;
     
     // Camera state
-    this.yaw = 0; // Horizontal rotation around target
-    this.pitch = Math.PI / 6; // Vertical angle (0 = horizontal, PI/2 = above)
-    this.pitchMin = Math.PI / 6; // Limit to 30 degrees up
-    this.pitchMax = Math.PI / 3; // Limit to 60 degrees down
+    this.yaw = options.initialYaw || 0; // Horizontal rotation around target
+    this.pitch = options.initialPitch !== undefined ? options.initialPitch : Math.PI / 6; // Vertical angle (0 = horizontal, PI/2 = above)
+    this.pitchMin = options.pitchMin !== undefined ? options.pitchMin : Math.PI / 6; // Limit to 30 degrees up
+    this.pitchMax = options.pitchMax !== undefined ? options.pitchMax : Math.PI / 3; // Limit to 60 degrees down
     
     // Smoothing
     this.currentDistance = this.distance;
