@@ -20,25 +20,27 @@ export function createGoal(
   placeholder.scale.set(0.5, 0.5, 0.5); // Make goal smaller
   group.add(placeholder);
 
-  // try loading model (supports glb or gltf). if first path fails, try alternate extension.
+  // sequentially try loading the model (supports glb or gltf)
   const loader = new GLTFLoader();
-  const attempts = [];
-  attempts.push(modelPath);
+  const paths = [modelPath];
   if (modelPath.match(/\.glb$/i)) {
-    attempts.push(modelPath.replace(/\.glb$/i, ".gltf"));
+    paths.push(modelPath.replace(/\.glb$/i, ".gltf"));
   } else if (modelPath.match(/\.gltf$/i)) {
-    attempts.push(modelPath.replace(/\.gltf$/i, ".glb"));
+    paths.push(modelPath.replace(/\.gltf$/i, ".glb"));
   }
 
-  let loaded = false;
-  let attemptsDone = 0;
-  attempts.forEach((path) => {
-    if (loaded) return;
+  let pathIndex = 0;
+
+  const tryLoad = () => {
+    if (pathIndex >= paths.length) {
+      console.warn("All goal model attempts failed; using placeholder cube.");
+      return;
+    }
+    const path = paths[pathIndex++];
     loader.load(
       path,
       (gltf) => {
-        if (loaded) return;
-        loaded = true;
+        // successfully loaded
         group.remove(placeholder);
         const model = gltf.scene || gltf;
         model.position.set(0, 0.9, 0);
@@ -48,13 +50,13 @@ export function createGoal(
       undefined,
       (err) => {
         console.warn("Goal model load failed (", path, "): ", err);
-        attemptsDone++;
-        if (attemptsDone === attempts.length && !loaded) {
-          console.warn("All goal model attempts failed; using placeholder cube.");
-        }
+        // try next after failure
+        tryLoad();
       }
     );
-  });
+  };
+
+  tryLoad();
 
   return group;
 }
