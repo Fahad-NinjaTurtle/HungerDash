@@ -78,16 +78,43 @@ export class ThirdPersonCamera {
   initTouchMove() {
     let lastTouchX = 0;
     let lastTouchY = 0;
+    let active = false;
 
-    document.addEventListener("touchstart", (e) => {
-      if (e.touches.length === 1) {
+    const isInJoystick = (target) => {
+      try {
+        return !!target?.closest?.("#mobile-controls");
+      } catch {
+        return false;
+      }
+    };
+
+    document.addEventListener(
+      "touchstart",
+      (e) => {
+        if (e.touches.length !== 1) {
+          active = false;
+          return;
+        }
+
+        // Ignore touch starts inside the virtual joystick area.
+        if (isInJoystick(e.touches[0].target)) {
+          active = false;
+          return;
+        }
+
+        active = true;
         lastTouchX = e.touches[0].clientX;
         lastTouchY = e.touches[0].clientY;
-      }
-    });
+      },
+      { passive: true }
+    );
 
-    document.addEventListener("touchmove", (e) => {
-      if (e.touches.length === 1) {
+    document.addEventListener(
+      "touchmove",
+      (e) => {
+        if (!active || e.touches.length !== 1) return;
+        e.preventDefault();
+
         const deltaX = e.touches[0].clientX - lastTouchX;
         const deltaY = e.touches[0].clientY - lastTouchY;
 
@@ -98,8 +125,19 @@ export class ThirdPersonCamera {
 
         lastTouchX = e.touches[0].clientX;
         lastTouchY = e.touches[0].clientY;
-      }
-    });
+      },
+      { passive: false }
+    );
+
+    document.addEventListener(
+      "touchend",
+      (e) => {
+        if (e.touches.length === 0) {
+          active = false;
+        }
+      },
+      { passive: true }
+    );
   }
   
   setCollisionObjects(objects) {

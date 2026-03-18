@@ -20,7 +20,29 @@ const overviewMode = {
   restoreTimeout: null,
   savedPos: null,
   savedQuat: null,
+  savedFov: null,
 };
+
+function fitTopDownCameraToMaze(camera, gameplayScene) {
+  const mazeWorldSize = gameplayScene.mazeSize * gameplayScene.cellSize;
+  const extraPadding = Math.max(4, gameplayScene.cellSize * 3);
+  const paddedWidth = mazeWorldSize + extraPadding * 2;
+  const paddedDepth = mazeWorldSize + extraPadding * 2;
+
+  const verticalFov = THREE.MathUtils.degToRad(camera.fov);
+  const halfVertical = Math.tan(verticalFov * 0.5);
+  const aspect = Math.max(camera.aspect || (window.innerWidth / window.innerHeight), 0.01);
+  const halfHorizontal = halfVertical * aspect;
+
+  const requiredHeightForDepth = (paddedDepth * 0.5) / Math.max(halfVertical, 0.001);
+  const requiredHeightForWidth = (paddedWidth * 0.5) / Math.max(halfHorizontal, 0.001);
+  const requiredHeight = Math.max(requiredHeightForDepth, requiredHeightForWidth);
+
+  return {
+    center: gameplayScene.mazeCenter.clone(),
+    height: requiredHeight,
+  };
+}
 
 function init() {
   renderer = createRenderer();
@@ -181,6 +203,9 @@ function updateGameplay(dt) {
       if (overviewMode.savedPos && overviewMode.savedQuat) {
         camera.position.copy(overviewMode.savedPos);
         camera.quaternion.copy(overviewMode.savedQuat);
+        camera.up.set(0, 1, 0);
+        if (overviewMode.savedFov !== null) camera.fov = overviewMode.savedFov;
+        camera.updateProjectionMatrix();
       }
       if (overviewMode.restoreTimeout) {
         clearTimeout(overviewMode.restoreTimeout);
@@ -193,18 +218,17 @@ function updateGameplay(dt) {
       overviewMode.savedPos = camera.position.clone();
       overviewMode.savedQuat = camera.quaternion.clone();
 
-      // compute a bounding area containing the entire maze
-      const mazeSize = gameplayScene.mazeSize * gameplayScene.cellSize; // ~42 units
-      const mid = new THREE.Vector3(mazeSize / 2, 0, mazeSize / 2);
+      const fittedView = fitTopDownCameraToMaze(camera, gameplayScene);
+      overviewMode.savedFov = camera.fov;
 
-      // fixed height to show whole maze a bit farther
-      const height = 35;
+      camera.position.set(fittedView.center.x, fittedView.height, fittedView.center.z);
+      camera.up.set(0, 0, -1);
+      camera.lookAt(fittedView.center.x, 0, fittedView.center.z);
+      camera.updateProjectionMatrix();
 
-      camera.position.set(mid.x, height, mid.z);
-      camera.lookAt(mid.x, 0, mid.z);
-
-      // still show overview marker as before
       gameplayScene.setOverviewMarkerVisible?.(true);
+      gameplayScene.setOverviewMarkerScale?.(Math.max(1.6, gameplayScene.mazeSize * 0.08));
+      gameplayScene.updateOverviewMarker?.();
 
       if (overviewMode.restoreTimeout) clearTimeout(overviewMode.restoreTimeout);
       overviewMode.restoreTimeout = setTimeout(() => {
@@ -214,6 +238,9 @@ function updateGameplay(dt) {
         if (overviewMode.savedPos && overviewMode.savedQuat) {
           camera.position.copy(overviewMode.savedPos);
           camera.quaternion.copy(overviewMode.savedQuat);
+          camera.up.set(0, 1, 0);
+          if (overviewMode.savedFov !== null) camera.fov = overviewMode.savedFov;
+          camera.updateProjectionMatrix();
         }
         overviewMode.restoreTimeout = null;
       }, 3000);
@@ -313,10 +340,6 @@ function enableMobileControls() {
   container.style.display = "block";
 
   const thumb = document.getElementById("joystick-thumb");
-  const rect = container.getBoundingClientRect();
-  const cx = rect.left + rect.width / 2;
-  const cy = rect.top + rect.height / 2;
-  const radius = Math.min(rect.width, rect.height) / 2 * 0.75;
 
   let activeId = null;
 
@@ -324,38 +347,18 @@ function enableMobileControls() {
     keys.w = keys.a = keys.s = keys.d = false;
   };
 
-  container.addEventListener("touchstart", (e) => {
-    e.preventDefault();
-    if (activeId !== null) return;
-    const t = e.changedTouches[0];
-    activeId = t.identifier;
-    moveThumb(t.clientX, t.clientY);
-  }, { passive: false });
+  const getJoystickMetrics = () => {
+    const rect = container.getBoundingClientRect();
+    return {
+      rect,
+      cx: rect.left + rect.width / 2,
+      cy: rect.top + rect.height / 2,
+      radius: Math.min(rect.width, rect.height) / 2 * 0.75,
+    };
+  };
 
-  container.addEventListener("touchmove", (e) => {
-    e.preventDefault();
-    if (activeId === null) return;
-    for (let i = 0; i < e.changedTouches.length; i++) {
-      const t = e.changedTouches[i];
-      if (t.identifier !== activeId) continue;
-      moveThumb(t.clientX, t.clientY);
-      break;
-    }
-  }, { passive: false });
-
-  container.addEventListener("touchend", (e) => {
-    for (let i = 0; i < e.changedTouches.length; i++) {
-      if (e.changedTouches[i].identifier === activeId) {
-        activeId = null;
-        thumb.style.top = "30%";
-        thumb.style.left = "30%";
-        resetKeys();
-        break;
-      }
-    }
-  });
-
-  function moveThumb(x, y) {
+  const moveThumb = (x, y) => {
+    const { rect, cx, cy, radius } = getJoystickMetrics();
     const dx = x - cx;
     const dy = y - cy;
     const dist = Math.hypot(dx, dy);
@@ -374,7 +377,48 @@ function enableMobileControls() {
       if (dx < -10) keys.a = true;
       if (dx > 10) keys.d = true;
     }
-  }
+  };
+
+  container.addEventListener(
+    "touchstart",
+    (e) => {
+      e.preventDefault();
+      if (activeId !== null) return;
+      const t = e.changedTouches[0];
+      activeId = t.identifier;
+      moveThumb(t.clientX, t.clientY);
+    },
+    { passive: false }
+  );
+
+  const onTouchMove = (e) => {
+    if (activeId === null) return;
+    e.preventDefault();
+
+    for (let i = 0; i < e.changedTouches.length; i++) {
+      const t = e.changedTouches[i];
+      if (t.identifier !== activeId) continue;
+      moveThumb(t.clientX, t.clientY);
+      break;
+    }
+  };
+
+  const onTouchEnd = (e) => {
+    for (let i = 0; i < e.changedTouches.length; i++) {
+      if (e.changedTouches[i].identifier === activeId) {
+        activeId = null;
+        thumb.style.top = "30%";
+        thumb.style.left = "30%";
+        resetKeys();
+        break;
+      }
+    }
+  };
+
+  // Listen globally so the joystick still works when the user drags outside the element.
+  document.addEventListener("touchmove", onTouchMove, { passive: false });
+  document.addEventListener("touchend", onTouchEnd);
+  document.addEventListener("touchcancel", onTouchEnd);
 }
 
 // mobile controls should be enabled once DOM is ready

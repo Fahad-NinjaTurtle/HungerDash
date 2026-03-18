@@ -174,23 +174,39 @@ export class GameplayScene {
   }
 
   _createOverviewMarker() {
-    // A small arrow + ring so user can see where player is from top
     const group = new THREE.Group();
     group.name = "OverviewMarker";
+    group.renderOrder = 999;
 
-    const ringGeo = new THREE.RingGeometry(0.35, 0.55, 32);
-    const ringMat = new THREE.MeshBasicMaterial({ color: 0xffff00, side: THREE.DoubleSide });
-    const ring = new THREE.Mesh(ringGeo, ringMat);
+    const baseMat = new THREE.MeshBasicMaterial({
+      color: 0x00ffff,
+      transparent: true,
+      opacity: 0.95,
+      side: THREE.DoubleSide,
+      depthTest: false,
+      depthWrite: false,
+    });
+
+    const ringMat = baseMat.clone();
+    ringMat.color.set(0xffff00);
+
+    const arrowMat = baseMat.clone();
+    arrowMat.color.set(0xff3b30);
+
+    const ring = new THREE.Mesh(new THREE.RingGeometry(0.55, 0.85, 40), ringMat);
     ring.rotation.x = -Math.PI / 2;
-    ring.position.y = 0.02;
 
-    const coneGeo = new THREE.ConeGeometry(0.25, 0.7, 16);
-    const coneMat = new THREE.MeshBasicMaterial({ color: 0xff2d2d });
-    const cone = new THREE.Mesh(coneGeo, coneMat);
-    cone.position.y = 0.45;
+    const centerDisc = new THREE.Mesh(new THREE.CircleGeometry(0.28, 28), baseMat.clone());
+    centerDisc.rotation.x = -Math.PI / 2;
+    centerDisc.position.y = 0.01;
+
+    const arrow = new THREE.Mesh(new THREE.ConeGeometry(0.28, 0.8, 16), arrowMat);
+    arrow.position.set(0, 0.45, -0.9);
+    arrow.rotation.x = Math.PI;
 
     group.add(ring);
-    group.add(cone);
+    group.add(centerDisc);
+    group.add(arrow);
     return group;
   }
 
@@ -198,11 +214,17 @@ export class GameplayScene {
     if (this.overviewMarker) this.overviewMarker.visible = !!visible;
   }
 
+  setOverviewMarkerScale(scale = 1) {
+    if (this.overviewMarker) {
+      this.overviewMarker.scale.setScalar(scale);
+    }
+  }
+
   updateOverviewMarker() {
     if (!this.overviewMarker || !this.playerData?.model) return;
-    // Keep it above player's XZ (player Y can be offset due to bottomOffset)
     const p = this.playerData.model.position;
-    this.overviewMarker.position.set(p.x, 0.01, p.z);
+    this.overviewMarker.position.set(p.x, 2.25, p.z);
+    this.overviewMarker.rotation.y = this.playerData.model.rotation.y;
   }
 
   createUI() {
