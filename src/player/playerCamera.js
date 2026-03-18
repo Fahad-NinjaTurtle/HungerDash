@@ -1,5 +1,5 @@
 // playerCamera.js
-import * as THREE from "three"; // ✅ REQUIRED
+import * as THREE from "three";; // ✅ REQUIRED
 
 export function updatePlayerCamera(camera, player) {
   if (!player) return;

@@ -1,4 +1,4 @@
-import * as THREE from "three";
+import * as THREE from "three";;
 
 export const addLights=(scene)=>{
     const ambient = new THREE.AmbientLight(0xffffff, 0.4);

@@ -1,4 +1,4 @@
-import * as THREE from "three";
+import * as THREE from "three";;
 import { createScene } from "../core/createScene.js";
 import { addLights } from "../world/addLights.js";
 import { createGround } from "../world/createGround.js";

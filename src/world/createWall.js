@@ -1,4 +1,4 @@
-import * as THREE from "three";
+import * as THREE from "three";;
 import { TextureLoader } from "three";
 
 // Shared texture loader and material for all walls

@@ -1,4 +1,4 @@
-import * as THREE from "three";
+import * as THREE from "three";;
 
 export function createSkyDome() {
   // No geometry.scale(-1,1,1). We render the inside using BackSide only.
