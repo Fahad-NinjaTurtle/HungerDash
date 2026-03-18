@@ -46,7 +46,7 @@ export class MainMenuScene {
         left: 0;
         width: 100%;
         height: 100%;
-        background: url('/Images/bgImage.png') center/cover no-repeat;
+        background: url('${import.meta.env.BASE_URL}Images/bgImage.png') center/cover no-repeat;
         opacity: 0.9;
       }
 
